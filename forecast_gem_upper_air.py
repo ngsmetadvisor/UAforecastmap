@@ -3480,9 +3480,9 @@ folium.LayerControl(collapsed=False).add_to(m)
 # ═══════════════════════════════════════════════════════════════════════════
 #  CONTROL BAR  — level (850/500) + time slider
 # ═══════════════════════════════════════════════════════════════════════════
-_bar_html = '''
+_bar_html = f'''
 <style>
-#syn-bar {
+#syn-bar {{
   position: fixed;
   bottom: 0; left: 0; right: 0;
   z-index: 10000;
@@ -3497,20 +3497,20 @@ _bar_html = '''
   color: #e0e0e0;
   box-shadow: 0 -3px 12px rgba(0,0,0,0.5);
   min-height: 52px;
-}
-#syn-bar .bar-label {
+}}
+#syn-bar .bar-label {{
   font-size: 8px; color: #8888aa; font-weight: bold;
   text-transform: uppercase; letter-spacing: 0.5px;
   white-space: nowrap;
-}
-#syn-bar .bar-section {
+}}
+#syn-bar .bar-section {{
   display: flex; align-items: center; gap: 6px;
   border-right: 1px solid #3a3a5a;
   padding-right: 14px;
   white-space: nowrap;
-}
-#syn-bar .bar-section:last-child { border-right: none; }
-.syn-lvl-btn {
+}}
+#syn-bar .bar-section:last-child {{ border-right: none; }}
+.syn-lvl-btn {{
   font-size: 12px; padding: 4px 14px;
   cursor: pointer;
   border: 1px solid #3a4a6a;
@@ -3520,10 +3520,10 @@ _bar_html = '''
   font-family: "Courier New", monospace;
   font-weight: bold;
   transition: background 0.15s;
-}
-.syn-lvl-btn:hover { background: #3a4a7a; }
-.syn-lvl-btn.active { background: #4a7fc1; color: #fff; border-color: #6a9fe1; }
-.syn-exp-btn {
+}}
+.syn-lvl-btn:hover {{ background: #3a4a7a; }}
+.syn-lvl-btn.active {{ background: #4a7fc1; color: #fff; border-color: #6a9fe1; }}
+.syn-exp-btn {{
   font-size: 11px; padding: 4px 12px;
   cursor: pointer;
   border: 1px solid #4a7fc1;
@@ -3532,26 +3532,60 @@ _bar_html = '''
   color: #c0d0ff;
   font-family: "Courier New", monospace;
   font-weight: bold;
-}
-.syn-exp-btn:hover { background: #4a7fc1; color: #fff; }
-.syn-exp-btn.export-all { border-color: #cc8800; color: #ffcc66; background: #3a2a00; }
-.syn-exp-btn.export-all:hover { background: #cc8800; color: #fff; }
-#syn-time-slider {
+}}
+.syn-exp-btn:hover {{ background: #4a7fc1; color: #fff; }}
+.syn-exp-btn.export-all {{ border-color: #cc8800; color: #ffcc66; background: #3a2a00; }}
+.syn-exp-btn.export-all:hover {{ background: #cc8800; color: #fff; }}
+#syn-time-slider {{
   width: 320px;
   accent-color: #4a7fc1;
   cursor: pointer;
-}
-#syn-ts-label {
-  color: #c0d0ff;
-  font-size: 11px;
+}}
+/* Time slider wrapper — shows tick labels below the slider */
+#syn-slider-wrap {{
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}}
+#syn-slider-ticks {{
+  display: flex;
+  justify-content: space-between;
+  font-size: 9px;
+  color: #6a7aaa;
+  width: 320px;
+  padding: 0 2px;
+  box-sizing: border-box;
+}}
+/* Current time step — large and prominent */
+#syn-ts-label {{
+  color: #ffe066;
+  font-size: 13px;
+  font-weight: bold;
   min-width: 200px;
-}
-#syn-export-status {
+  letter-spacing: 0.5px;
+}}
+/* Model run info badges */
+#syn-model-info {{
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 9px;
+}}
+.syn-run-badge {{
+  padding: 2px 7px;
+  border-radius: 3px;
+  font-weight: bold;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+}}
+.syn-run-badge.rdps {{ background: #1a3a1a; color: #66ff88; border: 1px solid #336633; }}
+.syn-run-badge.gdps {{ background: #1a1a3a; color: #88aaff; border: 1px solid #334488; }}
+#syn-export-status {{
   color: #ffcc66;
   font-size: 10px;
   min-width: 120px;
-}
-#syn-export-panel {
+}}
+#syn-export-panel {{
   position: fixed;
   top: 50px; left: 10px;
   z-index: 10001;
@@ -3564,7 +3598,7 @@ _bar_html = '''
   color: #e0e0e0;
   box-shadow: 0 2px 10px rgba(0,0,0,0.4);
   min-width: 130px;
-}
+}}
 </style>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -3583,21 +3617,34 @@ _bar_html = '''
     <span class="bar-label">Export</span>
     <button class="syn-exp-btn export-all" onclick="synExportAll()">Export All</button>
     <button class="syn-exp-btn" style="display:block;width:100%;margin-top:4px;border-color:#22aa44;color:#88ffaa;background:#003311;" onclick="synExportBothPDFs()">Export PDFs</button>
-
     <span id="syn-export-status"></span>
   </div>
+
+  <!-- Model run time info -->
+  <div class="bar-section">
+    <div id="syn-model-info">
+      <span class="syn-run-badge rdps">RDPS run: {_rdps_run_dt.strftime("%Y-%m-%d %HZ")}</span>
+      <span class="syn-run-badge gdps">GDPS run: {_gdps_run_dt.strftime("%Y-%m-%d %HZ")}</span>
+    </div>
+  </div>
+
   <div class="bar-section">
     <span class="bar-label">Level</span>
     <button class="syn-lvl-btn active" id="btn-850" onclick="synSetLevel(\'850\')">850 hPa</button>
     <button class="syn-lvl-btn"        id="btn-500" onclick="synSetLevel(\'500\')">500 hPa</button>
   </div>
-  <div class="bar-section">
-    <span class="bar-label">Time</span>
-    <input type="range" id="syn-time-slider" min="0" value="0"
-           oninput="synSliderChange(this.value)">
-  </div>
-  <div class="bar-section">
-    <span id="syn-ts-label">—</span>
+
+  <!-- Time slider with tick labels and current time displayed prominently -->
+  <div class="bar-section" style="flex-direction:column;align-items:flex-start;gap:4px;">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <span class="bar-label">Time</span>
+      <span id="syn-ts-label">—</span>
+    </div>
+    <div id="syn-slider-wrap">
+      <input type="range" id="syn-time-slider" min="0" value="0"
+             oninput="synSliderChange(this.value)">
+      <div id="syn-slider-ticks"></div>
+    </div>
   </div>
 </div>
 '''
@@ -3633,6 +3680,32 @@ function _btnOff(id) {{ var b = document.getElementById(id); if (b) b.classList.
 function _setExportStatus(msg) {{
   var el = document.getElementById("syn-export-status");
   if (el) el.textContent = msg;
+}}
+
+// ── Build slider tick labels ──────────────────────────────────────────────
+function _buildSliderTicks() {{
+  var tickEl = document.getElementById("syn-slider-ticks");
+  var slider = document.getElementById("syn-time-slider");
+  if (!tickEl || !slider || !_SYN_TIME_STEPS.length) return;
+  slider.max = String(_SYN_TIME_STEPS.length - 1);
+
+  // Show up to 7 ticks evenly spaced; always include first and last
+  var n     = _SYN_TIME_STEPS.length;
+  var MAX_T = Math.min(n, 7);
+  var idxs  = [];
+  if (n <= MAX_T) {{
+    for (var i = 0; i < n; i++) idxs.push(i);
+  }} else {{
+    for (var t = 0; t < MAX_T; t++) idxs.push(Math.round(t * (n - 1) / (MAX_T - 1)));
+  }}
+
+  tickEl.innerHTML = idxs.map(function(i) {{
+    var lbl   = _SYN_TIME_STEPS[i].label || "";
+    // Shorten "Wed May 28 12Z" → "28 12Z" to fit under slider
+    var parts = lbl.split(" ");
+    var short = parts.length >= 4 ? (parts[2] + " " + parts[3]) : lbl;
+    return '<span title="' + lbl + '">' + short + '</span>';
+  }}).join("");
 }}
 
 // ── Level selector ────────────────────────────────────────────────────────
@@ -4269,6 +4342,7 @@ function _synInit() {{
     slider.max   = String(Math.max(0, _SYN_TIME_STEPS.length - 1));
     slider.value = "0";
   }}
+  _buildSliderTicks();
   synSetLevel("850");
   synRender();
 }}

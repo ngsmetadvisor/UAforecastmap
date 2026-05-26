@@ -24,7 +24,8 @@ jobs:
       - name: Install Python packages
         run: |
           pip install requests scipy matplotlib numpy pykrige \
-                      folium shapely branca pandas cfgrib eccodes
+                      folium shapely branca pandas cfgrib eccodes \
+                      ipython metpy aiohttp
 
       - name: Run script
         run: python forecast_gem_upper_air.py

@@ -3,6 +3,10 @@ name: Run UA Forecast Map
 on:
   schedule:
     - cron: '0 14 * * *'    # daily at 14:00 UTC — adjust to your needs
+    - cron: '0 16 * * *'    # daily at 16:00 UTC — adjust to your needs
+    - cron: '0 02 * * *'    # daily at 02:00 UTC — adjust to your needs
+    - cron: '0 04 * * *'    # daily at 04:00 UTC — adjust to your needs
+
   workflow_dispatch:          # lets you run it manually too
 
 jobs:

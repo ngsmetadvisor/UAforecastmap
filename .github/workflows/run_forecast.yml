@@ -1,41 +1,51 @@
 name: Run UA Forecast Map
+
 on:
   schedule:
-    - cron: '0 16 * * *'    # daily 16:00 UTC = 9am MST / 10am MDT (after 12Z data)
-    - cron: '0 06 * * *'    # daily 06:00 UTC = 11pm MST / midnight MDT (after 00Z data)
-  workflow_dispatch:          # manual trigger
+    - cron: '0 16 * * *'  # daily 16:00 UTC = 9am MST / 10am MDT (after 12Z data)
+    - cron: '0 06 * * *'  # daily 06:00 UTC = 11pm MST / midnight MDT (after 00Z data)
+  workflow_dispatch:       # manual trigger
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 permissions:
-  contents: write             # needed to push to gh-pages branch
+  contents: write          # needed to push to gh-pages branch
 
 jobs:
   run:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.2.2
+
       - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v5.6.0
         with:
           python-version: '3.11'
+
       - name: Install system libs
         run: sudo apt-get install -y libeccodes-dev
+
       - name: Install Python packages
         run: |
           pip install requests scipy matplotlib numpy pykrige \
-                      folium shapely branca pandas cfgrib eccodes \
-                      ipython metpy aiohttp xarray
+            folium shapely branca pandas cfgrib eccodes \
+            ipython metpy aiohttp xarray
+
       - name: Run script
         run: python forecast_gem_upper_air.py
+
       - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v4
+        uses: peaceiris/actions-gh-pages@v4.0.0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: .
           publish_branch: gh-pages
           keep_files: false
+
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v4.6.2
         with:
           name: UA-Forecast
           path: UA_Forecast.html

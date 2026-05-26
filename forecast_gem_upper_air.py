@@ -945,6 +945,7 @@ if os.path.exists(_CHECKPOINT):
 else:
     _point_data = {}
     print('No checkpoint found — starting fresh')
+    pass
 
 # ╔══════════════════════════════════════════════════════════════════════════╗
 # ║                     BUILD DOWNLOAD TASK LIST                            ║

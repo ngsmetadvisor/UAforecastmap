@@ -939,13 +939,12 @@ else:
     _CHECKPOINT = 'gem_ua_checkpoint.pkl'
 print(f'Checkpoint path : {_CHECKPOINT}')
 if os.path.exists(_CHECKPOINT):
-    with open(_CHECKPOINT, 'rb') as f:
-        _point_data = pickle.load(f)
-    print(f'⚡ Resuming from checkpoint: {len(_point_data)} keys already fetched')
-else:
-    _point_data = {}
-    print('No checkpoint found — starting fresh')
-    pass
+        with open(_CHECKPOINT, 'rb') as f:
+            _point_data = pickle.load(f)
+        print(f'⚡ Resuming from checkpoint: {len(_point_data)} keys already fetched')
+    else:
+        _point_data = {}
+        print('No checkpoint found — starting fresh')
 
 # ╔══════════════════════════════════════════════════════════════════════════╗
 # ║                     BUILD DOWNLOAD TASK LIST                            ║

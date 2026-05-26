@@ -4282,7 +4282,7 @@ m.get_root().html.add_child(Element(_bar_html))
 m.get_root().html.add_child(Element(_js))
 
 # ── Save and display ───────────────────────────────────────────────────────
-out_path = 'synoptic_map.html'
+out_path = 'UA_Forecast.html'
 m.save(out_path)
 
 print(f'✓ Map saved → {out_path}')

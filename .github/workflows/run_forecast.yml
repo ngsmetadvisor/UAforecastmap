@@ -1,0 +1,36 @@
+name: Run UA Forecast Map
+
+on:
+  schedule:
+    - cron: '0 14 * * *'    # daily at 14:00 UTC — adjust to your needs
+  workflow_dispatch:          # lets you run it manually too
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install system libs
+        run: sudo apt-get install -y libeccodes-dev
+
+      - name: Install Python packages
+        run: |
+          pip install requests scipy matplotlib numpy pykrige \
+                      folium shapely branca pandas cfgrib eccodes
+
+      - name: Run script
+        run: python forecast_gem_upper_air.py
+
+      - name: Upload output
+        uses: actions/upload-artifact@v4
+        with:
+          name: forecast-html
+          path: '*.html'

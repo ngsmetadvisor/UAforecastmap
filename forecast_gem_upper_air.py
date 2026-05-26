@@ -1250,8 +1250,7 @@ if _tasks_missing:
     for t in _tasks_missing:
         print(f'  → {t[0]}  {t[4].strftime("%Y-%m-%d %HZ")}  {t[2]}@{t[3]}hPa')
 
-    _retry_errors = await _fetch_and_extract_all.__wrapped__(_tasks_missing) \
-        if hasattr(_fetch_and_extract_all, '__wrapped__') else None
+    _retry_errors = None
 
     # Inline retry using the same logic
     async def _retry_fetch():
@@ -1293,7 +1292,8 @@ if _tasks_missing:
             await asyncio.gather(*[_worker(*t) for t in _tasks_missing])
         return errors
 
-    _retry_errors = await _retry_fetch()
+    import asyncio
+    _retry_errors = asyncio.get_event_loop().run_until_complete(_retry_fetch())
 
     _still_missing = [t for t in _tasks_missing if not _task_fetched(t[0], t[2], t[3], t[4])]
     if _still_missing:
@@ -2320,20 +2320,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from metpy.calc import peak_persistence, smooth_gaussian
 from metpy.units import units
 
-# ── Colab keepalive ───────────────────────────────────────────────────────
-import threading
 
-def _keepalive():
-    while True:
-        time.sleep(30)
-        try:
-            from google.colab import output
-            output.eval_js('0')
-        except Exception:
-            pass
-
-threading.Thread(target=_keepalive, daemon=True).start()
-print('✓ Keepalive started')
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -5666,6 +5653,3 @@ Ctrl A & Ctrl / to cancel comment out.
 # }});
 # </script>
 # '''
-
-import asyncio
-asyncio.run(_main())

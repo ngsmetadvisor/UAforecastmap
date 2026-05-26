@@ -935,34 +935,22 @@ else:
     # ╔══════════════════════════════════════════════════════════════════════════╗
     # ║                     CHECKPOINT RESUME                                   ║
     # ╚══════════════════════════════════════════════════════════════════════════╝
+import pickle, os
+_CHECKPOINT = 'gem_ua_checkpoint.pkl'
+print(f'Checkpoint path : {_CHECKPOINT}')
+if os.path.exists(_CHECKPOINT):
+    with open(_CHECKPOINT, 'rb') as f:
+        _point_data = pickle.load(f)
+    print(f'⚡ Resuming from checkpoint: {len(_point_data)} keys already fetched')
+else:
+    _point_data = {}
+    print('No checkpoint found — starting fresh')
 
-    import pickle, os
-    # Mount Drive if not already mounted
-    try:
-        import google.colab.drive as _drive
-        if not os.path.exists('/content/drive/MyDrive'):
-            _drive.mount('/content/drive')
-    except Exception as _e:
-        print(f'⚠ Drive mount failed ({_e}) — using local checkpoint instead')
-    _CHECKPOINT = ('/content/drive/MyDrive/gem_ua_checkpoint.pkl'
-                   if os.path.exists('/content/drive/MyDrive')
-                   else '/content/gem_ua_checkpoint.pkl')
-    print(f'Checkpoint path : {_CHECKPOINT}')
-
-    if os.path.exists(_CHECKPOINT):
-        with open(_CHECKPOINT, 'rb') as f:
-            _point_data = pickle.load(f)
-        print(f'⚡ Resuming from checkpoint: {len(_point_data)} keys already fetched')
-    else:
-        _point_data = {}
-        print('No checkpoint found — starting fresh')
-
-    # ╔══════════════════════════════════════════════════════════════════════════╗
-    # ║                     BUILD DOWNLOAD TASK LIST                            ║
-    # ╚══════════════════════════════════════════════════════════════════════════╝
-
-    _rdps_run_dt = _latest_run([0, 6, 12, 18], min_age_h=3.0)
-    _gdps_run_dt = _latest_run([0, 12], min_age_h=6.0)
+# ╔══════════════════════════════════════════════════════════════════════════╗
+# ║                     BUILD DOWNLOAD TASK LIST                            ║
+# ╚══════════════════════════════════════════════════════════════════════════╝
+_rdps_run_dt = _latest_run([0, 6, 12, 18], min_age_h=3.0)
+_gdps_run_dt = _latest_run([0, 12], min_age_h=6.0)
 
     # Target valid times: 12Z each day, days 0–GDPS_FORECAST_DAYS from now
     _target_vts = []

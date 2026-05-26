@@ -1197,6 +1197,9 @@ async def _main():
     global gem_ua_errors
     gem_ua_errors = await _fetch_and_extract_all()
 
+import asyncio
+asyncio.run(_main())
+
 # ╔══════════════════════════════════════════════════════════════════════════════╗
 # ║                     RETRY MISSING TASKS                                     ║
 # ╚══════════════════════════════════════════════════════════════════════════════╝
@@ -1297,93 +1300,86 @@ else:
             print(f'    [{_e}]  {_u}')
 
 
-    # ╔══════════════════════════════════════════════════════════════════════════╗
-    # ║                     ASSEMBLE gem_ua_df                                  ║
-    # ╚══════════════════════════════════════════════════════════════════════════╝
+# ╔══════════════════════════════════════════════════════════════════════════╗
+# ║                     ASSEMBLE gem_ua_df  (always runs)                   ║
+# ╚══════════════════════════════════════════════════════════════════════════╝
 
-    _COLS = ['icao','wmo','stn_name','lat','lon','valid_time','hour',
-             'PRES','HGHT','TEMP','DWPT','RELH','MIXR','DRCT','SPED','THTA','THTE','THTV']
+_COLS = ['icao','wmo','stn_name','lat','lon','valid_time','hour',
+         'PRES','HGHT','TEMP','DWPT','RELH','MIXR','DRCT','SPED','THTA','THTE','THTV']
 
-    rows = []
-    for (lat, lon, vt_str, pres), fields in _point_data.items():
-        vt     = datetime.strptime(vt_str, '%Y-%m-%d %HZ').replace(tzinfo=_tz.utc)
-        prefix = 'RDPS' if vt < _RDPS_CUTOFF else 'GDPS'
-        temp   = fields.get('TEMP')
-        hght   = fields.get('HGHT')
-        rh     = fields.get('RELH')
-        u      = fields.get('_UGRD')
-        v      = fields.get('_VGRD')
-        drct, sped = _uv_to_spd_dir(u, v)
-        dwpt = _rh_to_dwpt(temp, rh)
-        mixr = _dwpt_to_mixr(dwpt, pres)
-        rows.append({
-            'icao':       _icao(lat, lon, prefix),
-            'wmo':        None,
-            'stn_name':   f'{prefix} {lat:+.1f}N {abs(lon):.1f}W',
-            'lat':        float(lat),
-            'lon':        float(lon),
-            'valid_time': vt_str,
-            'hour':       int(vt.hour),
-            'PRES':       float(pres),
-            'HGHT':       hght,
-            'TEMP':       temp,
-            'DWPT':       dwpt,
-            'RELH':       rh,
-            'MIXR':       mixr,
-            'DRCT':       drct,
-            'SPED':       sped,
-            'THTA':       _theta(temp, pres),
-            'THTE':       _theta_e(temp, dwpt, pres),
-            'THTV':       _theta_v(temp, mixr, pres),
-            '_model':     prefix,
-        })
+rows = []
+for (lat, lon, vt_str, pres), fields in _point_data.items():
+    vt     = datetime.strptime(vt_str, '%Y-%m-%d %HZ').replace(tzinfo=_tz.utc)
+    prefix = 'RDPS' if vt < _RDPS_CUTOFF else 'GDPS'
+    temp   = fields.get('TEMP')
+    hght   = fields.get('HGHT')
+    rh     = fields.get('RELH')
+    u      = fields.get('_UGRD')
+    v      = fields.get('_VGRD')
+    drct, sped = _uv_to_spd_dir(u, v)
+    dwpt = _rh_to_dwpt(temp, rh)
+    mixr = _dwpt_to_mixr(dwpt, pres)
+    rows.append({
+        'icao':       _icao(lat, lon, prefix),
+        'wmo':        None,
+        'stn_name':   f'{prefix} {lat:+.1f}N {abs(lon):.1f}W',
+        'lat':        float(lat),
+        'lon':        float(lon),
+        'valid_time': vt_str,
+        'hour':       int(vt.hour),
+        'PRES':       float(pres),
+        'HGHT':       hght,
+        'TEMP':       temp,
+        'DWPT':       dwpt,
+        'RELH':       rh,
+        'MIXR':       mixr,
+        'DRCT':       drct,
+        'SPED':       sped,
+        'THTA':       _theta(temp, pres),
+        'THTE':       _theta_e(temp, dwpt, pres),
+        'THTV':       _theta_v(temp, mixr, pres),
+        '_model':     prefix,
+    })
 
-    gem_ua_df = (pd.DataFrame(rows)[_COLS + ['_model']]
-                 if rows else pd.DataFrame(columns=_COLS + ['_model']))
+gem_ua_df = (pd.DataFrame(rows)[_COLS + ['_model']]
+             if rows else pd.DataFrame(columns=_COLS + ['_model']))
 
-    # ── Merge into ua_raw_df ──────────────────────────────────────────────────
-    if 'ua_raw_df' not in dir():
-        print('⚠  ua_raw_df not found — creating empty frame. Re-run surface cell first.')
-        ua_raw_df = pd.DataFrame(columns=_COLS)
+# ── Merge into ua_raw_df ──────────────────────────────────────────────────
+if 'ua_raw_df' not in dir():
+    print('⚠  ua_raw_df not found — creating empty frame. Re-run surface cell first.')
+    ua_raw_df = pd.DataFrame(columns=_COLS)
 
-    ua_raw_df = ua_raw_df[
-        ~ua_raw_df['icao'].str.startswith('GDPS') &
-        ~ua_raw_df['icao'].str.startswith('RDPS')
-    ].copy()
+ua_raw_df = ua_raw_df[
+    ~ua_raw_df['icao'].str.startswith('GDPS') &
+    ~ua_raw_df['icao'].str.startswith('RDPS')
+].copy()
 
-    _before   = len(ua_raw_df)
-    ua_raw_df = pd.concat([ua_raw_df, gem_ua_df[_COLS]], ignore_index=True)
+_before   = len(ua_raw_df)
+ua_raw_df = pd.concat([ua_raw_df, gem_ua_df[_COLS]], ignore_index=True)
 
-    print(f'\n✓ ua_raw_df: {_before} → {len(ua_raw_df)} rows (+{len(gem_ua_df)} GEM levels)')
-    print(f'  Total stations  : {ua_raw_df["icao"].nunique()}')
-    print(f'  RDPS stations   : {gem_ua_df[gem_ua_df["_model"]=="RDPS"]["icao"].nunique()}')
-    print(f'  GDPS stations   : {gem_ua_df[gem_ua_df["_model"]=="GDPS"]["icao"].nunique()}')
-    print(f'  Valid times     : {sorted(ua_raw_df["valid_time"].unique())}')
-    print(f'  Pres levels     : {sorted(ua_raw_df["PRES"].unique(), reverse=True)}')
+print(f'\n✓ ua_raw_df: {_before} → {len(ua_raw_df)} rows (+{len(gem_ua_df)} GEM levels)')
+print(f'  Total stations  : {ua_raw_df["icao"].nunique()}')
+print(f'  RDPS stations   : {gem_ua_df[gem_ua_df["_model"]=="RDPS"]["icao"].nunique()}')
+print(f'  GDPS stations   : {gem_ua_df[gem_ua_df["_model"]=="GDPS"]["icao"].nunique()}')
+print(f'  Valid times     : {sorted(ua_raw_df["valid_time"].unique())}')
+print(f'  Pres levels     : {sorted(ua_raw_df["PRES"].unique(), reverse=True)}')
 
-    _summary = (
-        gem_ua_df
-        .groupby(['_model', 'valid_time'])
-        .agg(rows=('PRES', 'count'))
-        .reset_index()
-        .pivot(index='_model', columns='valid_time', values='rows')
-        .fillna(0).astype(int)
-        .reset_index()
-    )
+_summary = (
+    gem_ua_df
+    .groupby(['_model', 'valid_time'])
+    .agg(rows=('PRES', 'count'))
+    .reset_index()
+    .pivot(index='_model', columns='valid_time', values='rows')
+    .fillna(0).astype(int)
+    .reset_index()
+)
 
-    display(HTML(
-        '<div style="font-family:Courier New,monospace;font-size:12px;'
-        'border:2px solid #1a4a7a;border-radius:8px;padding:10px 16px;'
-        'background:#e8f0fb;margin:8px 0;">'
-        '<b style="color:#1a3a6a;">✔ GEM upper-air merged into ua_raw_df '
-        '(RDPS days 0-3 · GDPS days 3-6 · dd.weather.gc.ca WXO-DD GRIB2)</b><br>'
-        f'<span style="color:#555;">'
-        f'{gem_ua_df["icao"].nunique()} virtual stations &mdash; '
-        f'{len(GEM_PRESSURE_LEVELS)} pressure levels &mdash; '
-        f'{gem_ua_df["valid_time"].nunique()} valid times &mdash; '
-        f'{len(gem_ua_df)} total rows</span></div>'
-        + _summary.to_html(index=False, border=0, table_id='gem-ua-summary')
-    ))
+print(f'\n✔ GEM upper-air merged into ua_raw_df '
+      f'(RDPS days 0-3 · GDPS days 3-6 · dd.weather.gc.ca WXO-DD GRIB2)\n'
+      f'{gem_ua_df["icao"].nunique()} virtual stations — '
+      f'{len(GEM_PRESSURE_LEVELS)} pressure levels — '
+      f'{gem_ua_df["valid_time"].nunique()} valid times — '
+      f'{len(gem_ua_df)} total rows')
 
 # @title
 # ── Cell UA-3 . Standard-level summary table (850/700/500/250 hPa) ────────

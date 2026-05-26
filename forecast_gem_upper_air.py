@@ -9,29 +9,9 @@ Original file is located at
 
 # @title
 # ── Cell 1 . Install & import packages ────────────────────────
-import subprocess, sys, importlib, importlib.util
+import subprocess, sys
 
-# ── Install missing packages ──────────────────────────────────
-_pkg_map = {
-    'requests':   'requests',
-    'scipy':      'scipy',
-    'matplotlib': 'matplotlib',
-    'numpy':      'numpy',
-    'pykrige':    'pykrige',
-    'folium':     'folium',
-    'shapely':    'shapely',
-    'branca':     'branca',
-    'pandas':     'pandas',
-}
-
-_to_install = [pip for pip, imp in _pkg_map.items()
-               if importlib.util.find_spec(imp) is None]
-
-if _to_install:
-    print(f'Installing: {_to_install}')
-    subprocess.check_call([sys.executable, '-m', 'pip', 'install', '-q'] + _to_install)
-else:
-    print('All packages already present — nothing to install.')
+print('All packages already present — nothing to install.')
 
 # ── Standard library ──────────────────────────────────────────
 import csv, io, json, math, re, time, warnings

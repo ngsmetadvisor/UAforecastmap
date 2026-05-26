@@ -2,8 +2,8 @@ name: Run UA Forecast Map
 
 on:
   schedule:
-    - cron: '0 16 * * *'  # daily 16:00 UTC = 9am MST / 10am MDT (after 12Z data)
-    - cron: '0 06 * * *'  # daily 06:00 UTC = 11pm MST / midnight MDT (after 00Z data)
+    - cron: '19 16 * * *'  # daily 16:00 UTC = 9am MST / 10am MDT (after 12Z data)
+    - cron: '17 06 * * *'  # daily 06:00 UTC = 11pm MST / midnight MDT (after 00Z data)
   workflow_dispatch:       # manual trigger
 
 env:

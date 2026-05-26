@@ -1,16 +1,12 @@
 name: Run UA Forecast Map
-
 on:
   schedule:
-    - cron: '0 16 * * *'    # daily at 16:00 UTC — adjust to your needs
-    - cron: '0 06 * * *'    # daily at 04:00 UTC — adjust to your needs
-
-  workflow_dispatch:          # lets you run it manually too
-
+    - cron: '0 16 * * *'    # daily 16:00 UTC = 9am MST / 10am MDT (after 12Z data)
+    - cron: '0 06 * * *'    # daily 06:00 UTC = 11pm MST / midnight MDT (after 00Z data)
+  workflow_dispatch:          # manual trigger
 jobs:
   run:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -27,13 +23,21 @@ jobs:
         run: |
           pip install requests scipy matplotlib numpy pykrige \
                       folium shapely branca pandas cfgrib eccodes \
-                      ipython metpy aiohttp
+                      ipython metpy aiohttp xarray
 
       - name: Run script
         run: python forecast_gem_upper_air.py
 
-      - name: Upload output
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: .
+          publish_branch: gh-pages
+          keep_files: false
+
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: forecast-html
-          path: '*.html'
+          name: UA-Forecast
+          path: UA_Forecast.html

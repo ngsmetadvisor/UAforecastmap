@@ -228,7 +228,18 @@ print('Open this session to change the met symbols sizes')
 # @title
 # -- Cell 8 - WMO station model as SVG string ---
 import math
-from IPython.display import SVG, display, HTML
+# IPython imports handled by shim above
+
+# ── Safe no-op shims for IPython display calls outside Jupyter ───────────
+try:
+    from IPython.display import display, HTML, SVG, Image as _IPImage
+except ImportError:
+    def display(*a, **kw): pass
+    def HTML(x): return x
+    def SVG(x): return x
+    class _IPImage:
+        def __init__(self, *a, **kw): pass
+# ─────────────────────────────────────────────────────────────────────────
 
 
 
@@ -682,7 +693,7 @@ import numpy as np
 import pandas as pd
 import threading, time
 from datetime import datetime, timezone as _tz, timedelta
-from IPython.display import display, HTML
+# IPython imports handled by shim above
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
 # ║                          USER CONTROLS                                      ║
@@ -1364,29 +1375,12 @@ print(f'  GDPS stations   : {gem_ua_df[gem_ua_df["_model"]=="GDPS"]["icao"].nuni
 print(f'  Valid times     : {sorted(ua_raw_df["valid_time"].unique())}')
 print(f'  Pres levels     : {sorted(ua_raw_df["PRES"].unique(), reverse=True)}')
 
-_summary = (
-    gem_ua_df
-    .groupby(['_model', 'valid_time'])
-    .agg(rows=('PRES', 'count'))
-    .reset_index()
-    .pivot(index='_model', columns='valid_time', values='rows')
-    .fillna(0).astype(int)
-    .reset_index()
-)
-
-print(f'\n✔ GEM upper-air merged into ua_raw_df '
-      f'(RDPS days 0-3 · GDPS days 3-6 · dd.weather.gc.ca WXO-DD GRIB2)\n'
-      f'{gem_ua_df["icao"].nunique()} virtual stations — '
-      f'{len(GEM_PRESSURE_LEVELS)} pressure levels — '
-      f'{gem_ua_df["valid_time"].nunique()} valid times — '
-      f'{len(gem_ua_df)} total rows')
-
 # @title
 # ── Cell UA-3 . Standard-level summary table (850/700/500/250 hPa) ────────
 print('--- Upper Air station - Data extract ---')
 import pandas as pd
 import numpy as np
-from IPython.display import display, HTML
+# IPython imports handled by shim above
 
 STANDARD_LEVELS = [850, 700, 500, 250]
 LEVEL_TOL       = 25
@@ -2011,7 +2005,7 @@ matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 import matplotlib.patches as _mpatches
 from datetime import date as _date
-from IPython.display import display as _display, Image as _Image
+# IPython imports handled by shim above
 
 print('=' * 60)
 print('  BLOCK 05 — Cell 2')
@@ -4286,25 +4280,10 @@ m.get_root().html.add_child(Element(_bar_html))
 m.get_root().html.add_child(Element(_js))
 
 # ── Save and display ───────────────────────────────────────────────────────
-out_path = '/content/synoptic_map.html'
+out_path = 'synoptic_map.html'
 m.save(out_path)
 
-from IPython.display import Javascript, display
-with open(out_path) as _f:
-    _html = _f.read()
-
-display(Javascript(f"""
-  var iframe = document.createElement('iframe');
-  iframe.style.width        = '100%';
-  iframe.style.height       = '1400px';
-  iframe.style.border       = '1px solid #ccc';
-  iframe.style.borderRadius = '6px';
-  var target = document.querySelector('#output-area, .output, .jp-OutputArea-output') || document.body;
-  target.appendChild(iframe);
-  iframe.contentDocument.open();
-  iframe.contentDocument.write({repr(_html)});
-  iframe.contentDocument.close();
-"""))
+print(f'✓ Map saved → {out_path}')
 
 
 _js = f'''
@@ -5587,7 +5566,7 @@ Ctrl A & Ctrl / to cancel comment out.
 # m.get_root().html.add_child(Element(_js))
 
 # # ── Save and display ───────────────────────────────────────────────────────
-# out_path = '/content/synoptic_map.html'
+# out_path = 'synoptic_map.html'
 # m.save(out_path)
 
 # from IPython.display import Javascript, display

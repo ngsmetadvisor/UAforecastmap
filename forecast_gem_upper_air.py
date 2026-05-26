@@ -102,30 +102,7 @@ if not os.path.exists('/usr/include/eccodes.h'):
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 print('✓ libeccodes-dev ready')
 
-# @title
-print('Colab keep alive demo')
 
-# ====================================================
-# Colab keepalive — run once, leave it going
-#=====================================================
-import threading, time
-
-_keepalive_running = True
-
-def _keepalive():
-    while _keepalive_running:
-        time.sleep(30)
-        try:
-            from google.colab import output
-            output.eval_js('0')
-        except Exception:
-            pass
-
-_t = threading.Thread(target=_keepalive, daemon=True)
-_t.start()
-print('✓ Keepalive started')
-##########################################################
-##########################################################
 
 # @title
 import urllib.request, xml.etree.ElementTree as ET, json
@@ -1249,8 +1226,9 @@ else:
         return errors
 
 
-    gem_ua_errors = await _fetch_and_extract_all()
-
+    async def _main():
+        global gem_ua_errors
+        gem_ua_errors = await _fetch_and_extract_all()
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
 # ║                     RETRY MISSING TASKS                                     ║
@@ -5689,10 +5667,5 @@ Ctrl A & Ctrl / to cancel comment out.
 # </script>
 # '''
 
-# @title
-
-#####################################################
-# ── Stop keepalive ────────────────────────────────
-#####################################################
-_keepalive_running = False
-print('✓ Keepalive stopped')
+import asyncio
+asyncio.run(_main())

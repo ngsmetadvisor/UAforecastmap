@@ -3478,6 +3478,24 @@ print(f'\n✓ _ts_ua_stn_json_str keys: {sorted(_ua_stn_data.keys())}')
 folium.LayerControl(collapsed=False).add_to(m)
 
 # ═══════════════════════════════════════════════════════════════════════════
+
+# ── Compute next scheduled run time (cron: 06Z and 16Z daily) ─────────────
+_sched_hours_utc = [6, 16]
+_now_utc_sched = datetime.now(_tz.utc)
+_next_sched = None
+for _h in sorted(_sched_hours_utc):
+    _cand = _now_utc_sched.replace(hour=_h, minute=0, second=0, microsecond=0)
+    if _cand > _now_utc_sched:
+        _next_sched = _cand
+        break
+if _next_sched is None:
+    _next_sched = (_now_utc_sched + timedelta(days=1)).replace(
+        hour=sorted(_sched_hours_utc)[0], minute=0, second=0, microsecond=0)
+_mins_until = int((_next_sched - _now_utc_sched).total_seconds() / 60)
+_next_scheduled_str = (f'{_next_sched.strftime("%Y-%m-%d %HZ")}'
+                       f' (in {_mins_until//60}h {_mins_until%60:02d}m)')
+print(f'Next scheduled run: {_next_scheduled_str}')
+
 #  CONTROL BAR  — level (850/500) + time slider
 # ═══════════════════════════════════════════════════════════════════════════
 _bar_html = f'''
@@ -3625,7 +3643,22 @@ _bar_html = f'''
     <div id="syn-model-info">
       <span class="syn-run-badge rdps">RDPS run: {_rdps_run_dt.strftime("%Y-%m-%d %HZ")}</span>
       <span class="syn-run-badge gdps">GDPS run: {_gdps_run_dt.strftime("%Y-%m-%d %HZ")}</span>
+      <span class="syn-run-badge" style="background:#2a1a3a;color:#ddaaff;border:1px solid #664488;">Generated: {datetime.now(_tz.utc).strftime("%Y-%m-%d %HZ")}</span>
+      <span class="syn-run-badge" style="background:#1a2a1a;color:#aaffcc;border:1px solid #336644;">Next run: {_next_scheduled_str}</span>
     </div>
+  </div>
+
+  <!-- Run Now button -->
+  <div class="bar-section">
+    <a href="https://github.com/ngsmetadvisor/UAforecastmap/actions/workflows/run_forecast.yml"
+       target="_blank"
+       style="display:inline-block;padding:5px 14px;background:#1a3a1a;color:#88ffaa;
+              border:1px solid #22aa44;border-radius:4px;font-family:Courier New,monospace;
+              font-size:11px;font-weight:bold;text-decoration:none;white-space:nowrap;
+              cursor:pointer;"
+       title="Opens GitHub Actions — click \'Run workflow\' to trigger manually">
+      &#9654; Run Now
+    </a>
   </div>
 
   <div class="bar-section">

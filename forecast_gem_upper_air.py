@@ -930,15 +930,14 @@ if _cache_fresh:
 
 
 
-    else:
-        pass
+else:
     # ╔══════════════════════════════════════════════════════════════════════════╗
     # ║                     CHECKPOINT RESUME                                   ║
     # ╚══════════════════════════════════════════════════════════════════════════╝
     import pickle, os
     _CHECKPOINT = 'gem_ua_checkpoint.pkl'
-print(f'Checkpoint path : {_CHECKPOINT}')
-if os.path.exists(_CHECKPOINT):
+    print(f'Checkpoint path : {_CHECKPOINT}')
+    if os.path.exists(_CHECKPOINT):
         with open(_CHECKPOINT, 'rb') as f:
             _point_data = pickle.load(f)
         print(f'⚡ Resuming from checkpoint: {len(_point_data)} keys already fetched')
@@ -952,20 +951,126 @@ if os.path.exists(_CHECKPOINT):
 _rdps_run_dt = _latest_run([0, 6, 12, 18], min_age_h=3.0)
 _gdps_run_dt = _latest_run([0, 12], min_age_h=6.0)
 
-    # Target valid times: 12Z each day, days 0–GDPS_FORECAST_DAYS from now
-    _target_vts = []
-    _base_day = _NOW_UTC.replace(hour=0, minute=0, second=0, microsecond=0)
-    for _d in range(GDPS_FORECAST_DAYS + 1):
-        for _h in sorted(UA_HOURS):
-            _vt = _base_day + timedelta(days=_d, hours=_h)
-            if _vt > _NOW_UTC or _vt == _base_day + timedelta(hours=12):
-              _target_vts.append(_vt)
+# Target valid times: 12Z each day, days 0–GDPS_FORECAST_DAYS from now
+_target_vts = []
+_base_day = _NOW_UTC.replace(hour=0, minute=0, second=0, microsecond=0)
+for _d in range(GDPS_FORECAST_DAYS + 1):
+    for _h in sorted(UA_HOURS):
+        _vt = _base_day + timedelta(days=_d, hours=_h)
+        if _vt > _NOW_UTC or _vt == _base_day + timedelta(hours=12):
+          _target_vts.append(_vt)
 
 
-    def _fxx(run_dt, valid_dt):
-        return int((valid_dt - run_dt).total_seconds() / 3600)
+def _fxx(run_dt, valid_dt):
+    return int((valid_dt - run_dt).total_seconds() / 3600)
 
-    _tasks = []
+_tasks = []
+for vt in _target_vts:
+    use_rdps = _NOW_UTC < vt < _RDPS_CUTOFF
+    for pres in GEM_PRESSURE_LEVELS:
+        for var_name in _WXO_VARS:
+            if use_rdps:
+                fxx = _fxx(_rdps_run_dt, vt)
+                if 0 <= fxx <= 84:
+                    _tasks.append(('RDPS', _rdps_url(_rdps_run_dt, fxx, var_name, pres),
+                                   var_name, pres, vt))
+            else:
+                fxx = _fxx(_gdps_run_dt, vt)
+                if 0 <= fxx <= 240:
+                    _tasks.append(('GDPS', _gdps_url(_gdps_run_dt, fxx, var_name, pres),
+                                   var_name, pres, vt))
+
+# Flat lists of target coordinates
+_target_lats = [lat for lat in GEM_LATITUDES for _   in GEM_LONGITUDE]
+_target_lons = [lon for _   in GEM_LATITUDES for lon in GEM_LONGITUDE]
+
+# Filter out tasks already in checkpoint
+def _task_done(model, var_name, pres, vt):
+    vt_str = vt.strftime('%Y-%m-%d') + f' {vt.hour:02d}Z'
+    col    = _VAR_MAP[var_name]
+    return any(_point_data.get((lat, lon, vt_str, float(pres)), {}).get(col) is not None
+               for lat, lon in zip(_target_lats, _target_lons))
+
+_tasks_before = len(_tasks)
+_tasks = [t for t in _tasks if not _task_done(t[0], t[2], t[3], t[4])]
+print(f'Skipping        : {_tasks_before - len(_tasks)} already-fetched tasks')
+
+print(f'RDPS run        : {_rdps_run_dt.strftime("%Y-%m-%d %HZ")}')
+print(f'GDPS run        : {_gdps_run_dt.strftime("%Y-%m-%d %HZ")}')
+print(f'RDPS cutoff UTC : {_RDPS_CUTOFF.isoformat()}')
+print(f'Valid times     : {[vt.strftime("%Y-%m-%d %HZ") for vt in _target_vts]}')
+print(f'Download tasks  : {len(_tasks)} GRIB2 files')
+print(f'Extraction pts  : {len(set(zip(_target_lats, _target_lons)))} grid points\n')
+
+
+# ╔══════════════════════════════════════════════════════════════════════════╗
+# ║                     ASYNC FETCH + EXTRACT                               ║
+# ╚══════════════════════════════════════════════════════════════════════════╝
+
+# _point_data already loaded from checkpoint above — do not reset
+# _point_data = {}
+
+async def _fetch_and_extract_all():
+    sem    = asyncio.Semaphore(MAX_CONCURRENT)
+    errors = []
+
+    async def _worker(model, url, var_name, pres, vt):
+        vt_str = vt.strftime('%Y-%m-%d') + f' {vt.hour:02d}Z'
+        col    = _VAR_MAP[var_name]
+
+        async with sem:
+            try:
+                async with session.get(
+                        url, timeout=aiohttp.ClientTimeout(total=TIMEOUT_S)) as r:
+                    raw = await r.read() if r.status == 200 else None
+                    status = r.status
+            except Exception as e:
+                errors.append((url, str(e)))
+                return
+
+        if raw is None:
+            errors.append((url, f'HTTP {status}'))
+            return
+        if len(raw) == 0:
+            errors.append((url, 'HTTP 200 but zero bytes'))
+            return
+
+        try:
+            extracted = _extract_points_grib(raw, _target_lats, _target_lons, var_name)
+        except Exception as e:
+            errors.append((url, str(e)))
+            return
+
+        for (lat, lon), val in extracted.items():
+            key = (lat, lon, vt_str, float(pres))
+            if key not in _point_data:
+                _point_data[key] = {}
+            _point_data[key][col] = val
+
+        print(f'  ✓ {model} {vt_str}  {var_name}@{pres}hPa  ({len(extracted)} pts)')
+
+        if len(_point_data) % 200 == 0:
+            with open(_CHECKPOINT, 'wb') as _f:
+                pickle.dump(_point_data, _f)
+
+    connector = aiohttp.TCPConnector(limit=MAX_CONCURRENT, ssl=False)
+    async with aiohttp.ClientSession(connector=connector) as session:
+        await asyncio.gather(*[_worker(*t) for t in _tasks])
+
+    # ── Post-fetch completeness report ───────────────────────────────────
+    _requested = set()
+    _fetched   = set()
+    for model, url, var_name, pres, vt in _tasks:
+        vt_str = vt.strftime('%Y-%m-%d') + f' {vt.hour:02d}Z'
+        col    = _VAR_MAP[var_name]
+        key    = (model, vt_str, var_name, float(pres))
+        _requested.add(key)
+        if any(_point_data.get((lat, lon, vt_str, float(pres)), {}).get(col) is not None
+               for lat, lon in zip(_target_lats, _target_lons)):
+            _fetched.add(key)
+
+    # Also check tasks skipped by checkpoint filter
+    _all_tasks_debug = []
     for vt in _target_vts:
         use_rdps = _NOW_UTC < vt < _RDPS_CUTOFF
         for pres in GEM_PRESSURE_LEVELS:
@@ -973,230 +1078,124 @@ _gdps_run_dt = _latest_run([0, 12], min_age_h=6.0)
                 if use_rdps:
                     fxx = _fxx(_rdps_run_dt, vt)
                     if 0 <= fxx <= 84:
-                        _tasks.append(('RDPS', _rdps_url(_rdps_run_dt, fxx, var_name, pres),
-                                       var_name, pres, vt))
+                        _all_tasks_debug.append((vt, var_name, pres))
                 else:
                     fxx = _fxx(_gdps_run_dt, vt)
                     if 0 <= fxx <= 240:
-                        _tasks.append(('GDPS', _gdps_url(_gdps_run_dt, fxx, var_name, pres),
-                                       var_name, pres, vt))
+                        _all_tasks_debug.append((vt, var_name, pres))
 
-    # Flat lists of target coordinates
-    _target_lats = [lat for lat in GEM_LATITUDES for _   in GEM_LONGITUDE]
-    _target_lons = [lon for _   in GEM_LATITUDES for lon in GEM_LONGITUDE]
-
-    # Filter out tasks already in checkpoint
-    def _task_done(model, var_name, pres, vt):
+    for vt, var_name, pres in _all_tasks_debug:
         vt_str = vt.strftime('%Y-%m-%d') + f' {vt.hour:02d}Z'
         col    = _VAR_MAP[var_name]
-        return any(_point_data.get((lat, lon, vt_str, float(pres)), {}).get(col) is not None
-                   for lat, lon in zip(_target_lats, _target_lons))
+        prefix = 'RDPS' if vt < _RDPS_CUTOFF else 'GDPS'
+        key    = (prefix, vt_str, var_name, float(pres))
+        _requested.add(key)
+        if any(_point_data.get((lat, lon, vt_str, float(pres)), {}).get(col) is not None
+               for lat, lon in zip(_target_lats, _target_lons)):
+            _fetched.add(key)
+        else:
+            print(f'  ✗ MISSING: {prefix}  {vt_str}  {var_name}@{int(pres)}hPa')
 
-    _tasks_before = len(_tasks)
-    _tasks = [t for t in _tasks if not _task_done(t[0], t[2], t[3], t[4])]
-    print(f'Skipping        : {_tasks_before - len(_tasks)} already-fetched tasks')
+    _missing_keys  = _requested - _fetched
+    _cached_keys   = _fetched - set(
+        ('RDPS' if t[4] < _RDPS_CUTOFF else 'GDPS',
+         t[4].strftime('%Y-%m-%d') + f' {t[4].hour:02d}Z',
+         t[2], float(t[3]))
+        for t in _tasks
+    )
+    _downloaded_keys = _fetched - _cached_keys
 
-    print(f'RDPS run        : {_rdps_run_dt.strftime("%Y-%m-%d %HZ")}')
-    print(f'GDPS run        : {_gdps_run_dt.strftime("%Y-%m-%d %HZ")}')
-    print(f'RDPS cutoff UTC : {_RDPS_CUTOFF.isoformat()}')
-    print(f'Valid times     : {[vt.strftime("%Y-%m-%d %HZ") for vt in _target_vts]}')
-    print(f'Download tasks  : {len(_tasks)} GRIB2 files')
-    print(f'Extraction pts  : {len(set(zip(_target_lats, _target_lons)))} grid points\n')
+    _summary_rows = []
+    for model, vt_str, var_name, pres in sorted(_requested, key=lambda x: (x[1], x[0], x[2], x[3])):
+        key = (model, vt_str, var_name, pres)
+        if key in _downloaded_keys:
+            status = '⬇ downloaded'
+            color  = '#0a5c36'
+            bg     = '#d1fae5'
+        elif key in _cached_keys:
+            status = '✓ cached'
+            color  = '#1e40af'
+            bg     = '#dbeafe'
+        else:
+            status = '✗ missing'
+            color  = '#991b1b'
+            bg     = '#fee2e2'
+        _summary_rows.append((model, vt_str, f'{var_name}@{int(pres)}hPa', status, color, bg))
 
+    _n_dl   = len(_downloaded_keys)
+    _n_ca   = len(_cached_keys)
+    _n_mi   = len(_missing_keys)
+    _n_tot  = len(_requested)
 
-    # ╔══════════════════════════════════════════════════════════════════════════╗
-    # ║                     ASYNC FETCH + EXTRACT                               ║
-    # ╚══════════════════════════════════════════════════════════════════════════╝
+    # Build matrix: rows = fields, cols = valid times
+    _all_vt_strs = sorted(set(vt_str for _, vt_str, _, _ in _requested))
+    _all_fields  = sorted(set(f'{var_name}@{int(pres)}hPa' for _, _, var_name, pres in _requested))
 
-    # _point_data already loaded from checkpoint above — do not reset
-    # _point_data = {}
+    _status_map = {}
+    for model, vt_str, field, status, color, bg in _summary_rows:
+        _status_map[(vt_str, field)] = (status, color, bg)
 
-    async def _fetch_and_extract_all():
-        sem    = asyncio.Semaphore(MAX_CONCURRENT)
-        errors = []
+    _col_headers = ''.join(
+        f'<th style="padding:6px 8px;color:#6b7280;font-weight:500;'
+        f'font-size:11px;white-space:nowrap;border-bottom:2px solid #e5e7eb;">'
+        f'{vt_str}</th>'
+        for vt_str in _all_vt_strs
+    )
 
-        async def _worker(model, url, var_name, pres, vt):
-            vt_str = vt.strftime('%Y-%m-%d') + f' {vt.hour:02d}Z'
-            col    = _VAR_MAP[var_name]
-
-            async with sem:
-                try:
-                    async with session.get(
-                            url, timeout=aiohttp.ClientTimeout(total=TIMEOUT_S)) as r:
-                        raw = await r.read() if r.status == 200 else None
-                        status = r.status
-                except Exception as e:
-                    errors.append((url, str(e)))
-                    return
-
-            if raw is None:
-                errors.append((url, f'HTTP {status}'))
-                return
-            if len(raw) == 0:
-                errors.append((url, 'HTTP 200 but zero bytes'))
-                return
-
-            try:
-                extracted = _extract_points_grib(raw, _target_lats, _target_lons, var_name)
-            except Exception as e:
-                errors.append((url, str(e)))
-                return
-
-            for (lat, lon), val in extracted.items():
-                key = (lat, lon, vt_str, float(pres))
-                if key not in _point_data:
-                    _point_data[key] = {}
-                _point_data[key][col] = val
-
-            print(f'  ✓ {model} {vt_str}  {var_name}@{pres}hPa  ({len(extracted)} pts)')
-
-            if len(_point_data) % 200 == 0:
-                with open(_CHECKPOINT, 'wb') as _f:
-                    pickle.dump(_point_data, _f)
-
-        connector = aiohttp.TCPConnector(limit=MAX_CONCURRENT, ssl=False)
-        async with aiohttp.ClientSession(connector=connector) as session:
-            await asyncio.gather(*[_worker(*t) for t in _tasks])
-
-        # ── Post-fetch completeness report ───────────────────────────────────
-        _requested = set()
-        _fetched   = set()
-        for model, url, var_name, pres, vt in _tasks:
-            vt_str = vt.strftime('%Y-%m-%d') + f' {vt.hour:02d}Z'
-            col    = _VAR_MAP[var_name]
-            key    = (model, vt_str, var_name, float(pres))
-            _requested.add(key)
-            if any(_point_data.get((lat, lon, vt_str, float(pres)), {}).get(col) is not None
-                   for lat, lon in zip(_target_lats, _target_lons)):
-                _fetched.add(key)
-
-        # Also check tasks skipped by checkpoint filter
-        _all_tasks_debug = []
-        for vt in _target_vts:
-            use_rdps = _NOW_UTC < vt < _RDPS_CUTOFF
-            for pres in GEM_PRESSURE_LEVELS:
-                for var_name in _WXO_VARS:
-                    if use_rdps:
-                        fxx = _fxx(_rdps_run_dt, vt)
-                        if 0 <= fxx <= 84:
-                            _all_tasks_debug.append((vt, var_name, pres))
-                    else:
-                        fxx = _fxx(_gdps_run_dt, vt)
-                        if 0 <= fxx <= 240:
-                            _all_tasks_debug.append((vt, var_name, pres))
-
-        for vt, var_name, pres in _all_tasks_debug:
-            vt_str = vt.strftime('%Y-%m-%d') + f' {vt.hour:02d}Z'
-            col    = _VAR_MAP[var_name]
-            prefix = 'RDPS' if vt < _RDPS_CUTOFF else 'GDPS'
-            key    = (prefix, vt_str, var_name, float(pres))
-            _requested.add(key)
-            if any(_point_data.get((lat, lon, vt_str, float(pres)), {}).get(col) is not None
-                   for lat, lon in zip(_target_lats, _target_lons)):
-                _fetched.add(key)
-            else:
-                print(f'  ✗ MISSING: {prefix}  {vt_str}  {var_name}@{int(pres)}hPa')
-
-        _missing_keys  = _requested - _fetched
-        _cached_keys   = _fetched - set(
-            ('RDPS' if t[4] < _RDPS_CUTOFF else 'GDPS',
-             t[4].strftime('%Y-%m-%d') + f' {t[4].hour:02d}Z',
-             t[2], float(t[3]))
-            for t in _tasks
-        )
-        _downloaded_keys = _fetched - _cached_keys
-
-        _summary_rows = []
-        for model, vt_str, var_name, pres in sorted(_requested, key=lambda x: (x[1], x[0], x[2], x[3])):
-            key = (model, vt_str, var_name, pres)
-            if key in _downloaded_keys:
-                status = '⬇ downloaded'
-                color  = '#0a5c36'
-                bg     = '#d1fae5'
-            elif key in _cached_keys:
-                status = '✓ cached'
-                color  = '#1e40af'
-                bg     = '#dbeafe'
-            else:
-                status = '✗ missing'
-                color  = '#991b1b'
-                bg     = '#fee2e2'
-            _summary_rows.append((model, vt_str, f'{var_name}@{int(pres)}hPa', status, color, bg))
-
-        _n_dl   = len(_downloaded_keys)
-        _n_ca   = len(_cached_keys)
-        _n_mi   = len(_missing_keys)
-        _n_tot  = len(_requested)
-
-        # Build matrix: rows = fields, cols = valid times
-        _all_vt_strs = sorted(set(vt_str for _, vt_str, _, _ in _requested))
-        _all_fields  = sorted(set(f'{var_name}@{int(pres)}hPa' for _, _, var_name, pres in _requested))
-
-        _status_map = {}
-        for model, vt_str, field, status, color, bg in _summary_rows:
-            _status_map[(vt_str, field)] = (status, color, bg)
-
-        _col_headers = ''.join(
-            f'<th style="padding:6px 8px;color:#6b7280;font-weight:500;'
-            f'font-size:11px;white-space:nowrap;border-bottom:2px solid #e5e7eb;">'
-            f'{vt_str}</th>'
-            for vt_str in _all_vt_strs
-        )
-
-        _html_rows = ''
-        for field in _all_fields:
-            _cells = ''
-            for vt_str in _all_vt_strs:
-                st, co, bg = _status_map.get((vt_str, field), ('–', '#9ca3af', '#f9fafb'))
-                symbol = '⬇' if 'downloaded' in st else ('✓' if 'cached' in st else ('✗' if 'missing' in st else '–'))
-                _cells += (
-                    f'<td style="padding:6px 8px;text-align:center;">'
-                    f'<span title="{st}" style="display:inline-block;width:22px;height:22px;'
-                    f'line-height:22px;border-radius:4px;background:{bg};color:{co};'
-                    f'font-size:13px;font-weight:600;">{symbol}</span></td>'
-                )
-            _html_rows += (
-                f'<tr style="border-bottom:0.5px solid #f3f4f6;">'
-                f'<td style="padding:6px 10px;font-size:12px;white-space:nowrap;'
-                f'color:#374151;font-weight:500;">{field}</td>'
-                f'{_cells}</tr>'
+    _html_rows = ''
+    for field in _all_fields:
+        _cells = ''
+        for vt_str in _all_vt_strs:
+            st, co, bg = _status_map.get((vt_str, field), ('–', '#9ca3af', '#f9fafb'))
+            symbol = '⬇' if 'downloaded' in st else ('✓' if 'cached' in st else ('✗' if 'missing' in st else '–'))
+            _cells += (
+                f'<td style="padding:6px 8px;text-align:center;">'
+                f'<span title="{st}" style="display:inline-block;width:22px;height:22px;'
+                f'line-height:22px;border-radius:4px;background:{bg};color:{co};'
+                f'font-size:13px;font-weight:600;">{symbol}</span></td>'
             )
+        _html_rows += (
+            f'<tr style="border-bottom:0.5px solid #f3f4f6;">'
+            f'<td style="padding:6px 10px;font-size:12px;white-space:nowrap;'
+            f'color:#374151;font-weight:500;">{field}</td>'
+            f'{_cells}</tr>'
+        )
 
-        _html = f'''
+    _html = f'''
 <div style="font-family:Courier New,monospace;font-size:12px;margin:8px 0;">
   <div style="display:flex;gap:12px;margin-bottom:10px;flex-wrap:wrap;">
-    <div style="background:#d1fae5;color:#0a5c36;padding:4px 14px;border-radius:6px;font-weight:600;">
-      ⬇ {_n_dl} downloaded</div>
-    <div style="background:#dbeafe;color:#1e40af;padding:4px 14px;border-radius:6px;font-weight:600;">
-      ✓ {_n_ca} cached</div>
-    <div style="background:{'#fee2e2' if _n_mi else '#f0fdf4'};color:{'#991b1b' if _n_mi else '#166534'};
-      padding:4px 14px;border-radius:6px;font-weight:600;">
-      {'✗' if _n_mi else '✓'} {_n_mi} missing</div>
-    <div style="background:#f3f4f6;color:#374151;padding:4px 14px;border-radius:6px;font-weight:600;">
-      {_n_tot} total</div>
+<div style="background:#d1fae5;color:#0a5c36;padding:4px 14px;border-radius:6px;font-weight:600;">
+  ⬇ {_n_dl} downloaded</div>
+<div style="background:#dbeafe;color:#1e40af;padding:4px 14px;border-radius:6px;font-weight:600;">
+  ✓ {_n_ca} cached</div>
+<div style="background:{'#fee2e2' if _n_mi else '#f0fdf4'};color:{'#991b1b' if _n_mi else '#166534'};
+  padding:4px 14px;border-radius:6px;font-weight:600;">
+  {'✗' if _n_mi else '✓'} {_n_mi} missing</div>
+<div style="background:#f3f4f6;color:#374151;padding:4px 14px;border-radius:6px;font-weight:600;">
+  {_n_tot} total</div>
   </div>
   <table style="border-collapse:collapse;width:100%;font-size:12px;">
-    <thead>
-      <tr style="background:#f9fafb;">
-        <th style="text-align:left;padding:6px 10px;color:#6b7280;font-weight:500;
-          border-bottom:2px solid #e5e7eb;">Field</th>
-        {_col_headers}
-      </tr>
-    </thead>
-    <tbody>
-      {_html_rows}
-    </tbody>
+<thead>
+  <tr style="background:#f9fafb;">
+    <th style="text-align:left;padding:6px 10px;color:#6b7280;font-weight:500;
+      border-bottom:2px solid #e5e7eb;">Field</th>
+    {_col_headers}
+  </tr>
+</thead>
+<tbody>
+  {_html_rows}
+</tbody>
   </table>
 </div>'''
 
-        display(HTML(_html))
+    display(HTML(_html))
 
-        return errors
+    return errors
 
 
-    async def _main():
-        global gem_ua_errors
-        gem_ua_errors = await _fetch_and_extract_all()
+async def _main():
+    global gem_ua_errors
+    gem_ua_errors = await _fetch_and_extract_all()
 
 # ╔══════════════════════════════════════════════════════════════════════════════╗
 # ║                     RETRY MISSING TASKS                                     ║

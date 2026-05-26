@@ -935,8 +935,8 @@ else:
     # ╔══════════════════════════════════════════════════════════════════════════╗
     # ║                     CHECKPOINT RESUME                                   ║
     # ╚══════════════════════════════════════════════════════════════════════════╝
-import pickle, os
-_CHECKPOINT = 'gem_ua_checkpoint.pkl'
+    import pickle, os
+    _CHECKPOINT = 'gem_ua_checkpoint.pkl'
 print(f'Checkpoint path : {_CHECKPOINT}')
 if os.path.exists(_CHECKPOINT):
     with open(_CHECKPOINT, 'rb') as f:

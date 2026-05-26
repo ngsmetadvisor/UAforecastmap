@@ -1405,7 +1405,7 @@ else:
     ua_raw_df['_date'] = ua_raw_df['valid_time'].astype(str).str[:10]
 
     if 'hour' not in ua_raw_df.columns:
-        ua_raw_df['hour'] = pd.to_datetime(ua_raw_df['valid_time'].str[:13], utc=True).dt.hour
+        ua_raw_df['hour'] = pd.to_datetime(ua_raw_df['valid_time'].str.replace(r'(\d{2})Z$', r'\1:00', regex=True), utc=True).dt.hour
 
     # ── Vectorised pivot approach — no Python loop over stations ──────────────
     # For each standard level, find the closest pressure row per group in one pass
@@ -1549,7 +1549,7 @@ else:
 
 import pandas as pd
 
-ua_summary_df['_vt']   = pd.to_datetime(ua_summary_df['valid_time'])
+ua_summary_df['_vt']   = pd.to_datetime(ua_summary_df['valid_time'].str.replace(r'(\d{2})Z$', r'\1:00', regex=True), utc=True)
 ua_summary_df['_date'] = ua_summary_df['_vt'].dt.date
 ua_summary_df['_hour'] = ua_summary_df['_vt'].dt.hour
 
@@ -1644,7 +1644,7 @@ def _filter_metar_for_synoptic(metar_records, date, hr, window=3):
 
 
 # ── synoptic time loop ─────────────────────────────────────────────────
-ua_summary_df['_vt']   = pd.to_datetime(ua_summary_df['valid_time'])
+ua_summary_df['_vt']   = pd.to_datetime(ua_summary_df['valid_time'].str.replace(r'(\d{2})Z$', r'\1:00', regex=True), utc=True)
 ua_summary_df['_date'] = ua_summary_df['_vt'].dt.date
 ua_summary_df['_hour'] = ua_summary_df['_vt'].dt.hour
 
@@ -2494,7 +2494,7 @@ def _process_level(_df_hr, _plvl, _bands_850, _bands_500, _hght_levels, _key):
 #  BUILD SYNOPTIC TIME LIST
 # ══════════════════════════════════════════════════════════════════════════
 
-ua_summary_df['_vt']   = pd.to_datetime(ua_summary_df['valid_time'])
+ua_summary_df['_vt']   = pd.to_datetime(ua_summary_df['valid_time'].str.replace(r'(\d{2})Z$', r'\1:00', regex=True), utc=True)
 ua_summary_df['_date'] = ua_summary_df['_vt'].dt.date
 ua_summary_df['_hour'] = ua_summary_df['_vt'].dt.hour
 
@@ -2934,7 +2934,7 @@ else:
 import json as _json_conv
 import pandas as pd
 
-ua_summary_df['_vt']   = pd.to_datetime(ua_summary_df['valid_time'])
+ua_summary_df['_vt']   = pd.to_datetime(ua_summary_df['valid_time'].str.replace(r'(\d{2})Z$', r'\1:00', regex=True), utc=True)
 ua_summary_df['_date'] = ua_summary_df['_vt'].dt.date
 ua_summary_df['_hour'] = ua_summary_df['_vt'].dt.hour
 

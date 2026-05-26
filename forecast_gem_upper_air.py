@@ -240,6 +240,8 @@ except ImportError:
     class _IPImage:
         def __init__(self, *a, **kw): pass
 # ─────────────────────────────────────────────────────────────────────────
+_display = display
+_Image = _IPImage
 
 
 

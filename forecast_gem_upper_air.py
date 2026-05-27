@@ -3641,10 +3641,10 @@ _bar_html = f'''
   <!-- Model run time info -->
   <div class="bar-section">
     <div id="syn-model-info">
-      <span class="syn-run-badge rdps">RDPS run: {_rdps_run_dt.strftime("%Y-%m-%d %HZ")}</span>
-      <span class="syn-run-badge gdps">GDPS run: {_gdps_run_dt.strftime("%Y-%m-%d %HZ")}</span>
+      <span class="syn-run-badge rdps">RDPS {_rdps_run_dt.strftime("%Y-%m-%d %HZ")} — <span id="rdps-age" style="font-variant-numeric:tabular-nums"></span></span>
+      <span class="syn-run-badge gdps">GDPS {_gdps_run_dt.strftime("%Y-%m-%d %HZ")} — <span id="gdps-age" style="font-variant-numeric:tabular-nums"></span></span>
       <span class="syn-run-badge" style="background:#2a1a3a;color:#ddaaff;border:1px solid #664488;">Generated: {datetime.now(_tz.utc).strftime("%Y-%m-%d %HZ")}</span>
-      <span class="syn-run-badge" style="background:#1a2a1a;color:#aaffcc;border:1px solid #336644;">Next run: {_next_scheduled_str}</span>
+      <span class="syn-run-badge" id="next-run-cd" style="background:#1a2a1a;color:#aaffcc;border:1px solid #336644;font-variant-numeric:tabular-nums">Next run: {_next_scheduled_str}</span>
     </div>
   </div>
 
@@ -4379,6 +4379,44 @@ function _synInit() {{
   synSetLevel("850");
   synRender();
 }}
+
+(function() {{
+  var RDPS_RUN = new Date("{_rdps_run_dt.strftime('%Y-%m-%dT%H:%M:%SZ')}");
+  var GDPS_RUN = new Date("{_gdps_run_dt.strftime('%Y-%m-%dT%H:%M:%SZ')}");
+  var SCHED    = [6, 16];
+  function _pad(n) {{ return String(n).padStart(2, "0"); }}
+  function _fmt(ms) {{
+    ms = Math.max(0, ms);
+    var s = Math.floor(ms / 1000);
+    var h = Math.floor(s / 3600); s -= h * 3600;
+    var m = Math.floor(s / 60);   s -= m * 60;
+    return _pad(h) + "h " + _pad(m) + "m " + _pad(s) + "s";
+  }}
+  function _nextSched(now) {{
+    for (var i = 0; i < SCHED.length; i++) {{
+      var c = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(),
+                                now.getUTCDate(), SCHED[i], 0, 0));
+      if (c > now) return c;
+    }}
+    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(),
+                             now.getUTCDate() + 1, SCHED[0], 0, 0));
+  }}
+  function _tickRunAge() {{
+    var now     = new Date();
+    var rdpsEl  = document.getElementById("rdps-age");
+    var gdpsEl  = document.getElementById("gdps-age");
+    var nextEl  = document.getElementById("next-run-cd");
+    if (rdpsEl) rdpsEl.textContent = _fmt(now - RDPS_RUN) + " old";
+    if (gdpsEl) gdpsEl.textContent = _fmt(now - GDPS_RUN) + " old";
+    if (nextEl) {{
+      var ms = _nextSched(now) - now;
+      nextEl.textContent = "Next run in " + _fmt(ms);
+      nextEl.style.color = ms < 3600000 ? "#ffaaaa" : "#aaffcc";
+    }}
+  }}
+  _tickRunAge();
+  setInterval(_tickRunAge, 1000);
+}})();
 
 if (document.readyState === "complete") {{ setTimeout(_synInit, 700); }}
 else {{ window.addEventListener("load", function() {{ setTimeout(_synInit, 700); }}); }}

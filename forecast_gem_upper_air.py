@@ -3643,7 +3643,7 @@ _bar_html = f'''
     <div id="syn-model-info">
       <span class="syn-run-badge rdps">RDPS {_rdps_run_dt.strftime("%Y-%m-%d %HZ")} — <span id="rdps-age" style="font-variant-numeric:tabular-nums"></span></span>
       <span class="syn-run-badge gdps">GDPS {_gdps_run_dt.strftime("%Y-%m-%d %HZ")} — <span id="gdps-age" style="font-variant-numeric:tabular-nums"></span></span>
-      <span class="syn-run-badge" style="background:#2a1a3a;color:#ddaaff;border:1px solid #664488;">Generated: {datetime.now(_tz.utc).strftime("%Y-%m-%d %HZ")}</span>
+<span class="syn-run-badge" id="generated-age" style="background:#2a1a3a;color:#ddaaff;border:1px solid #664488;font-variant-numeric:tabular-nums">Generated: {datetime.now(_tz.utc).strftime("%Y-%m-%d %HZ")} — <span id="gen-age"></span></span>
       <span class="syn-run-badge" id="next-run-cd" style="background:#1a2a1a;color:#aaffcc;border:1px solid #336644;font-variant-numeric:tabular-nums">Next run: {_next_scheduled_str}</span>
     </div>
   </div>
@@ -4383,6 +4383,7 @@ function _synInit() {{
 (function() {{
   var RDPS_RUN = new Date("{_rdps_run_dt.strftime('%Y-%m-%dT%H:%M:%SZ')}");
   var GDPS_RUN = new Date("{_gdps_run_dt.strftime('%Y-%m-%dT%H:%M:%SZ')}");
+  var GEN_TIME = new Date("{datetime.now(_tz.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}");
   var SCHED    = [6, 16];
   function _pad(n) {{ return String(n).padStart(2, "0"); }}
   function _fmt(ms) {{
@@ -4408,6 +4409,8 @@ function _synInit() {{
     var nextEl  = document.getElementById("next-run-cd");
     if (rdpsEl) rdpsEl.textContent = _fmt(now - RDPS_RUN) + " old";
     if (gdpsEl) gdpsEl.textContent = _fmt(now - GDPS_RUN) + " old";
+    var genEl = document.getElementById("gen-age");
+    if (genEl) genEl.textContent = _fmt(now - GEN_TIME) + " old";
     if (nextEl) {{
       var ms = _nextSched(now) - now;
       nextEl.textContent = "Next run in " + _fmt(ms);
